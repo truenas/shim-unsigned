@@ -11,8 +11,8 @@ ifeq ($(shell dpkg-vendor --is ubuntu && echo yes),yes)
 	distributor=ubuntu
 COMMON_OPTIONS ?= ENABLE_SHIM_CERT=1 ENABLE_SBSIGN=1
 else
-	cert=debian/debian-uefi-ca.der
-	distributor=debian
+	cert=debian/proxmox-uefi-ca.der
+	distributor=proxmox
 endif
 
 deb_version             := $(shell dpkg-parsechangelog | sed -ne "s/^Version: \(.*\)/\1/p")

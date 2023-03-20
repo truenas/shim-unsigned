@@ -49,3 +49,10 @@ Depends: ${misc:Depends},
 Description: boot loader to chain-load signed boot loaders (signing template)
  This package contains template files for shim-helpers-arm64-signed.
  This is only needed for Secure Boot signing.
+
+Package: proxmox-shim-unsigned
+Architecture: any
+Depends: shim-unsigned (= ${binary:Version})
+Description: Empty package ensuring Proxmox version of shim-unsigned is installed.
+ This package serves no purpose other than providing an unversioned dependency
+ for Proxmox meta packages.

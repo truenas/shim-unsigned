@@ -14,9 +14,7 @@ sbat_var_payload_header:
 .Lsbat_var_payload_header_end:
 	.balign	1, 0
 .Lsbat_var_previous:
-	.ascii SBAT_VAR_PREVIOUS
-	.byte	0
+	.asciz SBAT_VAR_PREVIOUS
 	.balign	1, 0
 .Lsbat_var_latest:
-	.ascii SBAT_VAR_LATEST
-	.byte 0
+	.asciz SBAT_VAR_LATEST

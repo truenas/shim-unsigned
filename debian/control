@@ -18,7 +18,7 @@ Vcs-Browser: https://git.proxmox.com/?p=efi-boot-shim.git
 Vcs-Git: git://git.proxmox.com/git/efi-boot-shim.git -b proxmox/bookworm
 
 Package: shim-unsigned
-Architecture: amd64 arm64 i386
+Architecture: amd64 arm64
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Conflicts: shim (<< 15+1533136590.3beb971-3~),
 Replaces: shim (<< 15+1533136590.3beb971-3~),
@@ -35,13 +35,6 @@ Architecture: amd64
 Depends: ${misc:Depends},
 Description: boot loader to chain-load signed boot loaders (signing template)
  This package contains template files for shim-helpers-amd64-signed.
- This is only needed for Secure Boot signing.
-
-Package: shim-helpers-i386-signed-template
-Architecture: i386
-Depends: ${misc:Depends},
-Description: boot loader to chain-load signed boot loaders (signing template)
- This package contains template files for shim-helpers-i386-signed.
  This is only needed for Secure Boot signing.
 
 Package: shim-helpers-arm64-signed-template

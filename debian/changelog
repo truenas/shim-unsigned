@@ -1,3 +1,34 @@
+shim (15.8-1~deb12u1) bookworm; urgency=medium
+
+  [ Steve McIntyre ]
+  * Cope with changes in pesign packaging.
+  * New upstream release fixing more bugs
+  * Remove all our previous patches, no longer needed:
+    + Make-sbat_var.S-parse-right-with-buggy-gcc-binutils.patch (now
+      upstream)
+    + Enable-NX.patch (we don't want NX just yet until the whole boot
+      stack is NX-capable)
+    + block-grub-sbat3-debian.patch (not needed now upstream grub SBAT
+      is 4)
+  * Cherry-pick 2 new patches from upstream for grub revocations:
+    + 0001-sbat-Add-grub.peimage-2-to-latest-CVE-2024-2312.patch
+    + 0002-sbat-Also-bump-latest-for-grub-4-and-to-todays-date.patch
+  * Log if the build is nx-compatible or not
+  * Force shim to use the latest revocations by default to block some
+    older grub / peimage issues. This is:
+    "shim,4\ngrub,4\ngrub.peimage,2\n"
+  * Install a copy of the Debian CA certificate into /usr/share/shim.
+    Closes: #1069054
+  * Clean up better after build. Closes: #1046268
+
+  [ Bastien Roucariès ]
+  * Port autopkgtest from ubuntu
+  * Import MR-12: "shim-unsigned:amd64 cannot be installed alongside
+    shim-unsigned:i386", thanks to adrian15 adrian15 (Closes: #936009).
+  * Fix debian/watch and check signature
+
+ -- Steve McIntyre <93sam@debian.org>  Sat, 04 May 2024 21:28:21 +0100
+
 shim (15.7-1+pmx1) bookworm; urgency=medium
 
   * Bump version for Proxmox build.

@@ -1,3 +1,9 @@
+shim (15.8-1+pmx1) bookworm; urgency=medium
+
+  * Bump version for Proxmox build.
+
+ -- Proxmox Support Team <support@proxmox.com>  Tue, 07 May 2024 09:08:22 +0200
+
 shim (15.8-1~deb12u1) bookworm; urgency=medium
 
   [ Steve McIntyre ]

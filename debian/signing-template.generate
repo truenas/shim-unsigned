@@ -26,7 +26,7 @@ template='./debian/signing-template'
 pkg_dir="debian/${pkg_name}/usr/share/code-signing/${pkg_name}"
 pkg_deb="${pkg_dir}/source-template/debian"
 
-install -o 0 -g 0 -m 0755 -d "${pkg_dir}"
+install -m 0755 -d "${pkg_dir}"
 subst < ./debian/signing-template.json.in > "${pkg_dir}/files.json"
 
 find "${template}" -type f -printf '%P\n' |
@@ -35,7 +35,7 @@ do
 	src="${template}/${path}"
 	dst=$(echo "${pkg_deb}/${path}" | subst)
 
-	install -o 0 -g 0 -m 0755 -d "${dst%/*}"
+	install -m 0755 -d "${dst%/*}"
 	subst < "${src}" > "${dst%.in}"
 	chmod --reference="${src}" "${dst%.in}"
 done

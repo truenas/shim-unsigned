@@ -2,6 +2,7 @@ Source: shim-helpers-@arch@-signed
 Section: admin
 Priority: optional
 Maintainer: Proxmox Support Team <support@proxmox.com>
+Rules-Requires-Root: no
 Standards-Version: 4.3.0
 Build-Depends: debhelper (>= 10.1~),
  sbsigntool [amd64 arm64 i386],

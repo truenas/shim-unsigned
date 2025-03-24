@@ -1,4 +1,4 @@
-shim (15.8-2) UNRELEASED; urgency=medium
+shim (16.0-1+pmx1) bookworm; urgency=medium
 
   [ Mate Kukri ]
   * Remove Ubuntu CA and dbx files from the repository
@@ -9,8 +9,15 @@ shim (15.8-2) UNRELEASED; urgency=medium
   [ Steve McIntyre ]
   * Also make the rules-requires-root changes in the templates for our
     generated packages. Closes: #1092425
+  * New upstream version 15.8
 
- -- Steve McIntyre <93sam@debian.org>  Wed, 08 Jan 2025 23:17:25 +0000
+  [ Fabian Grünbichler ]
+  * d/watch: mangle RC versions
+  * remove i386 template lintian overrides
+  * New upstream version 16.0
+  * Set SBAT_AUTOMATIC_DATE to 2025021800
+
+ -- Proxmox Support Team <support@proxmox.com>  Mon, 24 Mar 2025 10:37:03 +0100
 
 shim (15.8-1+pmx1) bookworm; urgency=medium
 

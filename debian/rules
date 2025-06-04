@@ -2,8 +2,8 @@
 
 include /usr/share/dpkg/architecture.mk
 
-cert=debian/proxmox-uefi-ca.der
-distributor=proxmox
+cert=debian/truenas-uefi-ca.der
+distributor=truenas
 
 deb_version             := $(shell dpkg-parsechangelog | sed -ne "s/^Version: \(.*\)/\1/p")
 upstream_version        := $(shell echo $(deb_version) | sed -e "s/-[^-]*$$//")

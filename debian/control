@@ -1,7 +1,7 @@
 Source: shim
 Section: admin
 Priority: optional
-Maintainer: Proxmox Support Team <support@proxmox.com>
+Maintainer: TrueNAS Engineering <dev@truenas.com>
 Rules-Requires-Root: no
 Standards-Version: 4.6.2
 Build-Depends: debhelper-compat (= 12),
@@ -15,8 +15,7 @@ Build-Depends: debhelper-compat (= 12),
 	       efivar,
 	       xxd,
 	       libefivar-dev
-Vcs-Browser: https://git.proxmox.com/?p=efi-boot-shim.git
-Vcs-Git: git://git.proxmox.com/git/efi-boot-shim.git -b proxmox/bookworm
+Homepage: https://github.com/truenas/shim-unsigned
 
 Package: shim-unsigned
 Architecture: amd64 arm64
@@ -44,10 +43,3 @@ Depends: ${misc:Depends},
 Description: boot loader to chain-load signed boot loaders (signing template)
  This package contains template files for shim-helpers-arm64-signed.
  This is only needed for Secure Boot signing.
-
-Package: proxmox-shim-unsigned
-Architecture: any
-Depends: shim-unsigned (= ${binary:Version})
-Description: Empty package ensuring Proxmox version of shim-unsigned is installed.
- This package serves no purpose other than providing an unversioned dependency
- for Proxmox meta packages.

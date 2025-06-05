@@ -2,7 +2,7 @@ shim-helpers-@arch@-signed (1+@version_mangled@) @distribution@; urgency=@urgenc
 
   * Update to shim @version_binary@
 
- -- Proxmox signing service <support@proxmox.com>  @date@
+ -- TrueNAS Engineering <dev@truenas.com>  @date@
 
 shim-helpers-@arch@-signed (1) unstable; urgency=medium
 

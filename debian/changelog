@@ -1,3 +1,9 @@
+shim (16.0+truenas-1) bookworm; urgency=medium
+
+  * Add TrueNAS support
+
+ -- TrueNAS Engineering <dev@truenas.com>  Thu, 05 Jun 2025 09:08:22 +0200
+
 shim (16.0-1+pmx1) bookworm; urgency=medium
 
   [ Mate Kukri ]

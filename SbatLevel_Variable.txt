@@ -1,0 +1,127 @@
+This file is the single source for SbatLevel revocations the format
+follows the variable payload and should not have any leading or
+trailing whitespace on the same line.
+
+Short descriptions of the revocations as well as CVE assignments (when
+available) should be provided when an entry is added.
+
+On systems that run shim, shim will manage these revocations. Sytems
+that never run shim, primarily Windows, but this applies to any OS
+that supports UEFI Secure Boot under the UEFI CA without shim can
+apply SBAT based revocations by setting the following variable
+from code running in boot services context.
+
+Name: SbatLevel
+Attributes: (EFI_VARIABLE_NON_VOLATILE | EFI_VARIABLE_BOOTSERVICE_ACCESS)
+Namespace Guid: 605dab50-e046-4300-abb6-3dd810dd8b23
+
+Variable content:
+
+Initialized, no revocations:
+
+sbat,1,2021030218
+
+To Revoke GRUB2 binaries impacted by
+
+* CVE-2021-3695
+* CVE-2021-3696
+* CVE-2021-3697
+* CVE-2022-28733
+* CVE-2022-28734
+* CVE-2022-28735
+* CVE-2022-28736
+
+sbat,1,2022052400
+grub,2
+
+and shim binaries impacted by
+
+* CVE-2022-28737
+
+sbat,1,2022052400
+shim,2
+grub,2
+
+Shim delivered both versions of these revocations with
+the same 2022052400 date stamp, once as an opt-in latest
+revocation with shim,2 and then as an automatic revocation without
+shim,2
+
+
+To revoke GRUB2 grub binaries impacted by
+
+* CVE-2022-2601
+* CVE-2022-3775
+
+sbat,1,2022111500
+shim,2
+grub,3
+
+To revoke Debian's grub.3 which missed
+the patches:
+
+sbat,1,2023012900
+shim,2
+grub,3
+grub.debian,4
+
+
+An additonal bug was fixed in shim that was not considered exploitable,
+can be revoked by setting:
+
+sbat,1,2023012950
+shim,3
+grub,3
+grub.debian,4
+
+shim did not deliver this payload at the time
+
+
+To Revoke GRUB2 binaries impacted by:
+
+* CVE-2023-4692
+* CVE-2023-4693
+
+These CVEs are in the ntfs module and vendors that do and do not
+ship this module as part of their signed binary are split.
+
+sbat,1,2023091900
+shim,2
+grub,4
+
+Since not everyone has shipped updated GRUB packages, shim did not
+deliver this revocation at the time.
+
+To Revoke shim binaries impacted by:
+
+* CVE-2023-40547
+* CVE-2023-40546
+* CVE-2023-40548
+* CVE-2023-40549
+* CVE-2023-40550
+* CVE-2023-40551
+
+sbat,1,2024010900
+shim,4
+grub,3
+grub.debian,4
+
+
+Revocations for:
+ - January 2024 shim CVEs
+ - October 2023 grub CVEs
+ - Debian/Ubuntu (peimage) CVE-2024-2312
+
+sbat,1,2024040900
+shim,4
+grub,4
+grub.peimage,2
+
+
+Revocations for:
+ - Februady 2025 GRUB CVEs
+
+sbat,1,2025021800
+shim,4
+grub,5
+

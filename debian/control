@@ -1,0 +1,45 @@
+Source: shim
+Section: admin
+Priority: optional
+Maintainer: TrueNAS Engineering <dev@truenas.com>
+Rules-Requires-Root: no
+Standards-Version: 4.6.2
+Build-Depends: debhelper-compat (= 12),
+	       gnu-efi (>= 3.0u),
+	       sbsigntool,
+	       openssl,
+	       libelf-dev,
+	       gcc-12,
+	       dos2unix,
+	       pesign (>= 0.112-5),
+	       efivar,
+	       xxd,
+	       libefivar-dev
+Homepage: https://github.com/truenas/shim-unsigned
+
+Package: shim-unsigned
+Architecture: amd64 arm64
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Conflicts: shim (<< 15+1533136590.3beb971-3~),
+Replaces: shim (<< 15+1533136590.3beb971-3~),
+Multi-Arch: same
+Description: boot loader to chain-load signed boot loaders under Secure Boot
+ This package provides a minimalist boot loader which allows verifying
+ signatures of other UEFI binaries against either the Secure Boot DB/DBX or
+ against a built-in signature database.  Its purpose is to allow a small,
+ infrequently-changing binary to be signed by the UEFI CA, while allowing
+ an OS distributor to revision their main bootloader independently of the CA.
+
+Package: shim-helpers-amd64-signed-template
+Architecture: amd64
+Depends: ${misc:Depends},
+Description: boot loader to chain-load signed boot loaders (signing template)
+ This package contains template files for shim-helpers-amd64-signed.
+ This is only needed for Secure Boot signing.
+
+Package: shim-helpers-arm64-signed-template
+Architecture: arm64
+Depends: ${misc:Depends},
+Description: boot loader to chain-load signed boot loaders (signing template)
+ This package contains template files for shim-helpers-arm64-signed.
+ This is only needed for Secure Boot signing.

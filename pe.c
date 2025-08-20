@@ -39,6 +39,136 @@
 })
 #define check_size(d, ds, h, hs) check_size_line(d, ds, h, hs, __LINE__)
 
+static EFI_STATUS
+_do_sha256_sum(void *addr, UINTN size, UINT8 *digest)
+{
+	unsigned int sha256ctxsize;
+	void *sha256ctx = NULL;
+
+	sha256ctxsize = Sha256GetContextSize();
+	sha256ctx = AllocateZeroPool(sha256ctxsize);
+	if (sha256ctx == NULL)
+		return EFI_OUT_OF_RESOURCES;
+
+	if (!Sha256Init(sha256ctx))
+		return EFI_OUT_OF_RESOURCES;
+
+	if (!Sha256Update(sha256ctx, addr, size))
+		return EFI_OUT_OF_RESOURCES;
+
+	if (!Sha256Final(sha256ctx, digest))
+		return EFI_OUT_OF_RESOURCES;
+
+	FreePool(sha256ctx);
+	return EFI_SUCCESS;
+}
+
+struct shim_section_cache_entry {
+	EFI_HANDLE parent_image_handle;
+	UINT8 section_name[9];
+	UINTN size;
+	/*
+	 * Since this is all internal and there's no API access to it, this is
+	 * currently always sha256 and can be updated as needed.
+	 */
+	UINT8 digest[32];
+};
+
+static struct shim_section_cache_entry *section_cache = NULL;
+static UINTN num_section_cache_entries = 0;
+
+static EFI_STATUS
+cache_section(EFI_HANDLE parent_image_handle, UINT8 section_name[8],
+	      void *addr, UINTN size)
+{
+	struct shim_section_cache_entry *new_section_cache = NULL;
+	struct shim_section_cache_entry *entry = NULL;
+	size_t oscsz = num_section_cache_entries * sizeof (*new_section_cache);
+	size_t nscsz = oscsz + sizeof (*new_section_cache);
+	EFI_STATUS efi_status;
+
+	new_section_cache = AllocateZeroPool(nscsz);
+	if (!new_section_cache)
+		return EFI_OUT_OF_RESOURCES;
+
+	if (section_cache) {
+		CopyMem(new_section_cache, section_cache, oscsz);
+		FreePool(section_cache);
+	}
+	section_cache = new_section_cache;
+	entry = &section_cache[num_section_cache_entries];
+
+	entry->parent_image_handle = parent_image_handle;
+	CopyMem(entry->section_name, section_name, sizeof(entry->section_name)-1);
+	entry->size = size;
+
+	efi_status = _do_sha256_sum(addr, size, entry->digest);
+	if (EFI_ERROR(efi_status)) {
+		ZeroMem(entry, sizeof (*entry));
+		return efi_status;
+	}
+	num_section_cache_entries += 1;
+	return EFI_SUCCESS;
+}
+
+EFI_STATUS
+validate_cached_section(EFI_HANDLE parent_image_handle,
+			void *addr, UINTN size)
+{
+	struct shim_section_cache_entry *section = NULL;
+	EFI_STATUS efi_status;
+
+	for (UINTN i = 0; i < num_section_cache_entries; i++) {
+		struct shim_section_cache_entry *this_entry = &section_cache[i];
+		UINT8 digest[32];
+
+		dprint(L"Handles: 0x%016llx 0x%016llx section: '%a'\n",
+		       (unsigned long long)(uintptr_t)this_entry->parent_image_handle,
+		       (unsigned long long)(uintptr_t)parent_image_handle,
+		       this_entry->section_name);
+
+		if (this_entry->size != size)
+			continue;
+		if (this_entry->parent_image_handle != parent_image_handle)
+			continue;
+
+		ZeroMem(digest, sizeof(digest));
+
+		efi_status = _do_sha256_sum(addr, size, digest);
+		if (EFI_ERROR(efi_status))
+			return efi_status;
+
+		if (CompareMem(digest, this_entry->digest, sizeof(digest)) != 0)
+			continue;
+
+		section = this_entry;
+		break;
+	}
+	if (section == NULL)
+		return EFI_NOT_FOUND;
+
+	return EFI_SUCCESS;
+}
+
+void
+flush_cached_sections(EFI_HANDLE parent_image_handle)
+{
+	UINTN reduction = 0;
+	for (UINTN i = 0; i < num_section_cache_entries; i++) {
+		struct shim_section_cache_entry *this_entry = &section_cache[i];
+
+		if (this_entry->parent_image_handle != parent_image_handle)
+			continue;
+
+		reduction += 1;
+		CopyMem(&this_entry[1], &this_entry[0], sizeof(*this_entry) * (num_section_cache_entries - i - 1));
+	}
+
+	ZeroMem(&section_cache[num_section_cache_entries - reduction],
+		sizeof(section_cache[0]) * reduction);
+
+	num_section_cache_entries -= reduction;
+}
 
 /*
  * Calculate the SHA1 and SHA256 hashes of a binary
@@ -285,14 +415,16 @@ generate_hash(char *data, unsigned int datasize,
 			goto done;
 		}
 
-#if 1
-	}
-#else // we have to migrate to doing this later :/
 		SumOfBytesHashed += hashsize;
 	}
 
-	/* Hash all remaining data */
-	if (datasize > SumOfBytesHashed) {
+	/* Hash all remaining data. If SecDir->Size is > 0 this code should not
+	 * be entered.  If it is, there are still things to hash.  For a file
+	 * without a SecDir, we need to hash what remains. */
+	if (datasize > SumOfBytesHashed + context->SecDir->Size) {
+		char padbuf[8];
+		ZeroMem(padbuf, 8);
+
 		hashbase = data + SumOfBytesHashed;
 		hashsize = datasize - SumOfBytesHashed;
 
@@ -306,8 +438,17 @@ generate_hash(char *data, unsigned int datasize,
 		}
 
 		SumOfBytesHashed += hashsize;
+		hashsize = ALIGN_VALUE(SumOfBytesHashed, 8) - SumOfBytesHashed;
+
+		if (hashsize) {
+			if (!(Sha256Update(sha256ctx, padbuf, hashsize)) ||
+			    !(Sha1Update(sha1ctx, padbuf, hashsize))) {
+				perror(L"Unable to generate hash\n");
+				efi_status = EFI_OUT_OF_RESOURCES;
+				goto done;
+			}
+		}
 	}
-#endif
 
 	if (!(Sha256Final(sha256ctx, sha256hash)) ||
 	    !(Sha1Final(sha1ctx, sha1hash))) {
@@ -418,7 +559,8 @@ EFI_STATUS verify_image(void *data, unsigned int datasize,
 	 */
 	if (secure_mode()) {
 		efi_status = verify_buffer(data, datasize,
-					   context, sha256hash, sha1hash);
+					   context, sha256hash, sha1hash,
+					   false);
 		if (EFI_ERROR(efi_status)) {
 			if (verbose)
 				console_print(L"Verification failed: %r\n", efi_status);
@@ -462,10 +604,11 @@ EFI_STATUS verify_image(void *data, unsigned int datasize,
  */
 EFI_STATUS
 handle_image (void *data, unsigned int datasize,
-	      EFI_LOADED_IMAGE *li,
+	      EFI_LOADED_IMAGE *li, EFI_HANDLE image_handle,
 	      EFI_IMAGE_ENTRY_POINT *entry_point,
 	      EFI_PHYSICAL_ADDRESS *alloc_address,
-	      UINTN *alloc_pages)
+	      UINTN *alloc_pages, unsigned int *alloc_alignment,
+	      bool parent_verified)
 {
 	EFI_STATUS efi_status;
 	char *buffer;
@@ -474,7 +617,7 @@ handle_image (void *data, unsigned int datasize,
 	char *base, *end;
 	UINT32 size;
 	PE_COFF_LOADER_IMAGE_CONTEXT context;
-	unsigned int alignment, alloc_size;
+	unsigned int alloc_size;
 	int found_entry_point = 0;
 	UINT8 sha1hash[SHA1_DIGEST_SIZE];
 	UINT8 sha256hash[SHA256_DIGEST_SIZE];
@@ -494,7 +637,7 @@ handle_image (void *data, unsigned int datasize,
 	 */
 	if (secure_mode ()) {
 		efi_status = verify_buffer(data, datasize, &context, sha256hash,
-					   sha1hash);
+					   sha1hash, parent_verified);
 
 		if (EFI_ERROR(efi_status)) {
 			if (verbose || in_protocol)
@@ -509,29 +652,37 @@ handle_image (void *data, unsigned int datasize,
 	}
 
 	/*
-	 * Calculate the hash for the TPM measurement.
-	 * XXX: We're computing these twice in secure boot mode when the
-	 *  buffers already contain the previously computed hashes. Also,
-	 *  this is only useful for the TPM1.2 case. We should try to fix
-	 *  this in a follow-up.
+	 * We had originally thought about making this much more granular
+	 * and logging the child section hashes in the event log, but the
+	 * EFI APIs give us extend-without-logging but not
+	 * logging-without-extending, so there's no point.
 	 */
-	efi_status = generate_hash(data, datasize, &context, sha256hash,
-				   sha1hash);
-	if (EFI_ERROR(efi_status))
-		return efi_status;
+	if (!parent_verified) {
+		/*
+		 * Calculate the hash for the TPM measurement.
+		 * XXX: We're computing these twice in secure boot mode when the
+		 *  buffers already contain the previously computed hashes. Also,
+		 *  this is only useful for the TPM1.2 case. We should try to fix
+		 *  this in a follow-up.
+		 */
+		efi_status = generate_hash(data, datasize, &context, sha256hash,
+					   sha1hash);
+		if (EFI_ERROR(efi_status))
+			return efi_status;
 
-	/* Measure the binary into the TPM */
+		/* Measure the binary into the TPM */
 #ifdef REQUIRE_TPM
-	efi_status =
+		efi_status =
 #endif
-	tpm_log_pe((EFI_PHYSICAL_ADDRESS)(UINTN)data, datasize,
-		   (EFI_PHYSICAL_ADDRESS)(UINTN)context.ImageAddress,
-		   li->FilePath, sha1hash, 4);
+		tpm_log_pe((EFI_PHYSICAL_ADDRESS)(UINTN)data, datasize,
+			   (EFI_PHYSICAL_ADDRESS)(UINTN)context.ImageAddress,
+			   li->FilePath, sha1hash, 4);
 #ifdef REQUIRE_TPM
-	if (efi_status != EFI_SUCCESS) {
-		return efi_status;
+		if (efi_status != EFI_SUCCESS) {
+			return efi_status;
+		}
+#endif
 	}
-#endif
 
 	/* The spec says, uselessly, of SectionAlignment:
 	 * =====
@@ -547,9 +698,9 @@ handle_image (void *data, unsigned int datasize,
 	 *
 	 * We only support one page size, so if it's zero, nerf it to 4096.
 	 */
-	alignment = context.SectionAlignment;
-	if (!alignment)
-		alignment = 4096;
+	*alloc_alignment = context.SectionAlignment;
+	if (!*alloc_alignment)
+		*alloc_alignment = 4096;
 
 	alloc_size = ALIGN_VALUE(context.ImageSize + context.SectionAlignment,
 				 PAGE_SIZE);
@@ -562,7 +713,7 @@ handle_image (void *data, unsigned int datasize,
 		return EFI_OUT_OF_RESOURCES;
 	}
 
-	buffer = (void *)ALIGN_VALUE((unsigned long)*alloc_address, alignment);
+	buffer = (void *)ALIGN_VALUE((unsigned long)*alloc_address, *alloc_alignment);
 	dprint(L"Loading 0x%llx bytes at 0x%llx\n",
 	       (unsigned long long)context.ImageSize,
 	       (unsigned long long)(uintptr_t)buffer);
@@ -728,13 +879,15 @@ handle_image (void *data, unsigned int datasize,
 	}
 
 	/*
-	 * Now set the page permissions appropriately.
+	 * Now set the page permissions appropriately and cache appropriate
+	 * section sizes, and digests.
 	 */
 	Section = context.FirstSection;
 	for (i = 0; i < context.NumberOfSections; i++, Section++) {
 		uint64_t set_attrs = MEM_ATTR_R;
 		uint64_t clear_attrs = MEM_ATTR_W|MEM_ATTR_X;
 		uintptr_t addr;
+		uint64_t raw_length;
 		uint64_t length;
 
 		/*
@@ -761,7 +914,8 @@ handle_image (void *data, unsigned int datasize,
 		// platforms generally set memory attributes at page
 		// granularity, but the section length (unlike the section
 		// address) is not required to be aligned.
-		length = ALIGN_VALUE((uintptr_t)end - (uintptr_t)base + 1, PAGE_SIZE);
+		raw_length = (uintptr_t)end - (uintptr_t)base + 1;
+		length = ALIGN_VALUE(raw_length, PAGE_SIZE);
 
 		if (Section->Characteristics & EFI_IMAGE_SCN_MEM_WRITE) {
 			set_attrs |= MEM_ATTR_W;
@@ -772,8 +926,28 @@ handle_image (void *data, unsigned int datasize,
 			clear_attrs &= ~MEM_ATTR_X;
 		}
 		update_mem_attrs(addr, length, set_attrs, clear_attrs);
-	}
 
+		/*
+		 * We only cache CODE and INITIALIZED data sections that
+		 * are marked readable.  Also, don't cache sections on the
+		 * second level deep...
+		 */
+		if ((Section->Characteristics & EFI_IMAGE_SCN_CNT_CODE ||
+		     Section->Characteristics & EFI_IMAGE_SCN_CNT_INITIALIZED_DATA) &&
+		    Section->Characteristics & EFI_IMAGE_SCN_MEM_READ &&
+		    !parent_verified) {
+			efi_status = cache_section(image_handle, Section->Name, base, raw_length);
+			if (EFI_ERROR(efi_status)) {
+				perror(L"Failed to cache section details\n");
+				BS->FreePages(*alloc_address, *alloc_pages);
+				return efi_status;
+			}
+			dprint(L"Cached section %d (%a) at 0x%016llx, size 0x%016llx\n",
+			       i, Section->Name,
+			       (unsigned long long)(uintptr_t)base,
+			       (unsigned long long)raw_length);
+		}
+	}
 
 	/*
 	 * grub needs to know its location and size in memory, so fix up
@@ -788,11 +962,13 @@ handle_image (void *data, unsigned int datasize,
 
 	if (!found_entry_point) {
 		perror(L"Entry point is not within sections\n");
+		flush_cached_sections(image_handle);
 		BS->FreePages(*alloc_address, *alloc_pages);
 		return EFI_UNSUPPORTED;
 	}
 	if (found_entry_point > 1) {
 		perror(L"%d sections contain entry point\n", found_entry_point);
+		flush_cached_sections(image_handle);
 		BS->FreePages(*alloc_address, *alloc_pages);
 		return EFI_UNSUPPORTED;
 	}

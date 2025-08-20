@@ -126,6 +126,7 @@ static CHAR16 str2ns(CHAR8 *str)
 
 static CHAR8 *str2ip6(CHAR8 *str)
 {
+	bool double_colon_found = false;
 	UINT8 i = 0, j = 0, p = 0;
 	size_t len = 0, dotcount = 0;
 	enum { MAX_IP6_DOTS = 7 };
@@ -147,6 +148,23 @@ static CHAR8 *str2ip6(CHAR8 *str)
 
 	len = strlen(str);
 	a = b = str;
+
+	for (i = 0; i < len; i++) {
+                if (str[i] == ':') {
+                        if (i+1 < (UINT8)len && str[i+1] == ':') {
+                                if (double_colon_found)
+                                        return (CHAR8 *)ip;
+                                double_colon_found = true;
+                        }
+                }
+                else {
+                        if (str[i] < '0' || (str[i] > '9' && str[i] < 'A') ||
+                           (str[i] > 'F' && str[i] < 'a') || str[i] > 'f')
+                                return (CHAR8 *)ip;
+                }
+        }
+
+
 	for (i = p = 0; i < len; i++, b++) {
 		if (*b != ':')
 			continue;
@@ -157,15 +175,20 @@ static CHAR8 *str2ip6(CHAR8 *str)
 		if (b[1] == ':' )
 			break;
 	}
-	a = b = (str + len);
-	for (j = len, p = 7; j > i; j--, a--) {
-		if (*a != ':')
-			continue;
-		t = *b;
-		*b = '\0';
-		ip[p--] = str2ns(a+1);
-		*b = t;
-		b = a;
+
+	if (i == len) {
+		ip[p++] = str2ns(a);
+	} else {
+		a = b = (str + len);
+		for (j = len, p = 7; j > i; j--, a--) {
+			if (*a != ':')
+				continue;
+			t = *b;
+			*b = '\0';
+			ip[p--] = str2ns(a+1);
+			*b = t;
+			b = a;
+		}
 	}
 	return (CHAR8 *)ip;
 }

@@ -6,6 +6,50 @@
 
 #include "shim.h"
 
+#define EFI_MAJOR_VERSION(tablep) ((UINT16)((((tablep)->Hdr.Revision) >> 16) & 0xfffful))
+#define EFI_MINOR_VERSION(tablep) ((UINT16)(((tablep)->Hdr.Revision) & 0xfffful))
+
+static BOOLEAN is_apple_firmware_vendor(void)
+{
+	CHAR16 vendorbuf[6] = L"";
+	CHAR16 *vendor = ST->FirmwareVendor;
+	if (!vendor)
+		return FALSE;
+
+	ZeroMem(vendorbuf, sizeof(vendorbuf));
+
+	/*
+	 * We've had a problem where ST->FirmwareVendor is only as big as
+	 * it needs to be (or at least less than the 200 bytes we formerly
+	 * defined vendorbuf as) and it's up against a page that's not
+	 * mapped readable, so we take a fault and reset when copying from
+	 * it.
+	 *
+	 * We modeled this after kernel, which has the 200 byte CHAR16
+	 * array and copies 198 bytes into it, so that there's a NUL
+	 * terminator.  They solve this issue by mapping the whole 200
+	 * bytes unconditionally and then unmapping it after the copy, but
+	 * we can't take that approach because we don't necessarily have
+	 * page permission primitives at all.
+	 *
+	 * The 200 bytes (CHAR16 [100]) is an arbitrary number anyway, but
+	 * it's likely larger than any sane vendor name, and we still want
+	 * to do the copy into an array larger than our copied data because
+	 * that's how we guard against failure to terminate with a NUL.
+	 *
+	 * So right now we're only copying ten bytes, because Apple is the
+	 * only vendor we're testing against.
+	 */
+	CopyMem(vendorbuf, vendor, 10);
+
+	dprint(L"FirmwareVendor: \"%s\"\n", vendor);
+
+	if (StrnCmp(vendor, L"Apple", 5) == 0)
+		return TRUE;
+
+	return FALSE;
+}
+
 /*
  * Check if a variable exists
  */
@@ -84,6 +128,105 @@ format_hsi_status(UINT8 *buf, size_t sz,
 	stpcpy(pos, finale);
 
 	return ret;
+}
+
+static UINTN
+format_variable_info(UINT8 *buf, size_t bufsz,
+		  struct mok_state_variable *msv UNUSED)
+{
+	typedef enum {
+		BS,
+		BS_NV,
+		BS_RT,
+		BS_RT_NV,
+		STOP
+	} variable_attr_t;
+	typedef struct {
+		uint64_t attrs;
+		char prefix[10];
+		uint64_t max_storage_sz;
+		uint64_t remaining_sz;
+		uint64_t max_var_sz;
+		bool valid;
+	} var_set_t;
+	var_set_t var_sets[] = {
+		[BS] = { EFI_VARIABLE_BOOTSERVICE_ACCESS,
+			"bs", 0, 0, 0, false },
+		[BS_NV] = { EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_NON_VOLATILE,
+			"bs_rt", 0, 0, 0, false },
+		[BS_RT] = { EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS,
+			"bs_nv", 0, 0, 0, false },
+		[BS_RT_NV] = { EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS | EFI_VARIABLE_NON_VOLATILE,
+			"bs_nv_rt", 0, 0, 0, false },
+		[STOP] = { 0, "", 0, 0, 0, false }
+	};
+	UINTN sz = 0;
+	UINTN pos = 0;
+
+	if (EFI_MAJOR_VERSION(RT) < 2 || is_apple_firmware_vendor()) {
+		dprint(L"EFI %d.%d; no RT->QueryVariableInfo() %a\n",
+		       EFI_MAJOR_VERSION(RT), EFI_MINOR_VERSION(RT),
+		       is_apple_firmware_vendor() ? "(Apple)" : "");
+		if (bufsz > 0)
+			buf[0] = '\0';
+		return 0;
+	} else {
+		EFI_STATUS efi_status;
+		variable_attr_t i;
+		for (i = BS; i < STOP; i++) {
+			var_set_t *var_set = &var_sets[i];
+			dprint(L"calling RT->QueryVariableInfo() for %a\n",
+			       var_set->prefix);
+			efi_status = RT->QueryVariableInfo(var_set->attrs,
+							   &var_set->max_storage_sz,
+							   &var_set->remaining_sz,
+							   &var_set->max_var_sz);
+			if (EFI_ERROR(efi_status)) {
+				perror(L"Could not get variable storage info: %r\n",
+				       efi_status);
+				var_set->max_storage_sz = 0;
+				var_set->remaining_sz = 0;
+				var_set->max_var_sz = 0;
+			} else {
+				var_set->valid = true;
+				sz += strlen(var_set->prefix)
+					+ strlen("-max_storage_sz: ")
+					+ strlen("0x0123456701234567\n");
+				sz += strlen(var_set->prefix)
+					+ strlen("-remaining_sz: ")
+					+ strlen("0x0123456701234567\n");
+				sz += strlen(var_set->prefix)
+					+ strlen("-max_var_sz: ")
+					+ strlen("0x0123456701234567\n");
+			}
+		}
+		sz += 1;
+	}
+
+	if (!buf || bufsz < sz) {
+		dprint(L"buf:0x%lx bufsz:0x%lx returning 0x%lx\n", buf, bufsz, sz);
+		return sz;
+	}
+
+	variable_attr_t i;
+	for (i = BS; i < STOP; i++) {
+		var_set_t *var_set = &var_sets[i];
+		UINTN rc;
+		rc = AsciiSPrint((CHAR8 *)buf + pos, bufsz - pos,
+				 "%a_max_storage_sz: 0x%lx\n",
+				 var_set->prefix, var_set->max_storage_sz);
+		pos += rc;
+		rc = AsciiSPrint((CHAR8 *)buf + pos, bufsz - pos,
+				 "%a_remaining_sz: 0x%lx\n",
+				 var_set->prefix, var_set->remaining_sz);
+		pos += rc;
+		rc = AsciiSPrint((CHAR8 *)buf + pos, bufsz - pos,
+				 "%a_max_var_sz: 0x%lx\n",
+				 var_set->prefix, var_set->max_var_sz);
+		pos += rc;
+	}
+
+	return pos;
 }
 
 /*
@@ -423,6 +566,17 @@ struct mok_state_variable mok_state_variable_data[] = {
 	 .guid = &SECUREBOOT_EFI_NAMESPACE_GUID,
 	 .flags = MOK_VARIABLE_CONFIG_ONLY,
 	},
+	/*
+	 * Keep this entry last, or it'll be wrong.
+	 */
+	{.name = L"VariableInfo",
+	 .name8 = "VariableInfo",
+	 .rtname = L"VariableInfo",
+	 .rtname8 = "VariableInfo",
+	 .guid = &SHIM_LOCK_GUID,
+	 .flags = MOK_VARIABLE_CONFIG_ONLY,
+	 .format = format_variable_info,
+	},
 	{ NULL, }
 };
 size_t n_mok_state_variables = sizeof(mok_state_variable_data) / sizeof(mok_state_variable_data[0]);
@@ -441,50 +595,6 @@ static const uint8_t null_sha256[32] = { 0, };
 
 typedef UINTN SIZE_T;
 
-#define EFI_MAJOR_VERSION(tablep) ((UINT16)((((tablep)->Hdr.Revision) >> 16) & 0xfffful))
-#define EFI_MINOR_VERSION(tablep) ((UINT16)(((tablep)->Hdr.Revision) & 0xfffful))
-
-static BOOLEAN is_apple_firmware_vendor(void)
-{
-	CHAR16 vendorbuf[6] = L"";
-	CHAR16 *vendor = ST->FirmwareVendor;
-	if (!vendor)
-		return FALSE;
-
-	ZeroMem(vendorbuf, sizeof(vendorbuf));
-
-	/*
-	 * We've had a problem where ST->FirmwareVendor is only as big as
-	 * it needs to be (or at least less than the 200 bytes we formerly
-	 * defined vendorbuf as) and it's up against a page that's not
-	 * mapped readable, so we take a fault and reset when copying from
-	 * it.
-	 *
-	 * We modeled this after kernel, which has the 200 byte CHAR16
-	 * array and copies 198 bytes into it, so that there's a NUL
-	 * terminator.  They solve this issue by mapping the whole 200
-	 * bytes unconditionally and then unmapping it after the copy, but
-	 * we can't take that approach because we don't necessarily have
-	 * page permission primitives at all.
-	 *
-	 * The 200 bytes (CHAR16 [100]) is an arbitrary number anyway, but
-	 * it's likely larger than any sane vendor name, and we still want
-	 * to do the copy into an array larger than our copied data because
-	 * that's how we guard against failure to terminate with a NUL.
-	 *
-	 * So right now we're only copying ten bytes, because Apple is the
-	 * only vendor we're testing against.
-	 */
-	CopyMem(vendorbuf, vendor, 10);
-
-	dprint(L"FirmwareVendor: \"%s\"\n", vendor);
-
-	if (StrnCmp(vendor, L"Apple", 5) == 0)
-		return TRUE;
-
-	return FALSE;
-}
-
 static EFI_STATUS
 get_max_var_sz(UINT32 attrs, SIZE_T *max_var_szp)
 {
@@ -495,8 +605,9 @@ get_max_var_sz(UINT32 attrs, SIZE_T *max_var_szp)
 
 	*max_var_szp = 0;
 	if (EFI_MAJOR_VERSION(RT) < 2 || is_apple_firmware_vendor()) {
-		dprint(L"EFI %d.%d; no RT->QueryVariableInfo().  Using 1024!\n",
-		       EFI_MAJOR_VERSION(RT), EFI_MINOR_VERSION(RT));
+		dprint(L"EFI %d.%d; no RT->QueryVariableInfo()%a.  Using 1024!\n",
+		       EFI_MAJOR_VERSION(RT), EFI_MINOR_VERSION(RT),
+		       is_apple_firmware_vendor() ? " (Apple)" : "");
 		max_var_sz = remaining_sz = max_storage_sz = 1024;
 		efi_status = EFI_SUCCESS;
 	} else {

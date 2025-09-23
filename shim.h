@@ -195,6 +195,7 @@
 #include "include/cc.h"
 #include "include/ucs2.h"
 #include "include/variables.h"
+#include "include/verify.h"
 #include "include/hexdump.h"
 
 #include "version.h"
@@ -273,11 +274,6 @@ extern UINT32 load_options_size;
 
 BOOLEAN secure_mode (void);
 
-EFI_STATUS
-verify_buffer (char *data, int datasize,
-	       PE_COFF_LOADER_IMAGE_CONTEXT *context,
-	       UINT8 *sha256hash, UINT8 *sha1hash);
-
 #ifndef SHIM_UNIT_TEST
 #define perror_(file, line, func, fmt, ...) ({					\
 		UINTN __perror_ret = 0;						\
@@ -330,6 +326,7 @@ typedef struct {
 	EFI_IMAGE_ENTRY_POINT	entry_point;
 	EFI_PHYSICAL_ADDRESS	alloc_address;
 	UINTN			alloc_pages;
+	unsigned int		alloc_alignment;
 	EFI_STATUS		exit_status;
 	CONST CHAR16		*exit_data;
 	UINTN			exit_data_size;

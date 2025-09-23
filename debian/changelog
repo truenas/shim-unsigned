@@ -1,3 +1,12 @@
+shim (16.1+truenas-1) trixie; urgency=medium
+
+  * New upstream release: 16.1
+
+  [ Steve McIntyre ]
+  * Switch to using gcc-13 for builds. Closes: #1092205
+
+ -- TrueNAS Engineering <dev@truenas.com>  Wed, 20 Aug 2025 08:00:00 +0200
+
 shim (16.0+truenas-1) bookworm; urgency=medium
 
   * Add TrueNAS support

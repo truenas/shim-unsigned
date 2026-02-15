@@ -2,6 +2,8 @@ shim (16.1+truenas-1) trixie; urgency=medium
 
   * New upstream release: 16.1
   * Switch to gcc-14
+  * Add lintian overrides:
+    + Ignore included binaries for unit tests
 
  -- TrueNAS Engineering <dev@truenas.com>  Wed, 20 Aug 2025 08:00:00 +0200
 

@@ -4,6 +4,7 @@ shim (16.1+truenas-1) trixie; urgency=medium
   * Switch to gcc-14
   * Add lintian overrides:
     + Ignore included binaries for unit tests
+  * Update TrueNAS UEFI CA certificate from key ceremony
 
  -- TrueNAS Engineering <dev@truenas.com>  Wed, 20 Aug 2025 08:00:00 +0200
 

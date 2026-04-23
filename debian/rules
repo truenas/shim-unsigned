@@ -103,9 +103,6 @@ override_dh_auto_install:
 
 	install -m 644 $(cert) debian/shim-unsigned/usr/share/shim
 
-	# Generate the template packages that we'll use for SB signing later
-	./debian/signing-template.generate
-
 	# Log some useful things about the build here
 	./debian/check_nx shim*.efi
 	sha256sum *.efi

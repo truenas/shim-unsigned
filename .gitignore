@@ -60,3 +60,6 @@ version.c
 /mkosi/mkosi.cache/
 /mkosi/mkosi.local.conf
 /mkosi/mkosi.output/
+
+!/debian/prebuilt/
+!/debian/prebuilt/**
